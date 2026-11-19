@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-app text-ink text-[14px] antialiased;
+  }
+  :focus-visible { outline: 2px solid #426A9B; outline-offset: 1px; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded border px-3 h-8 text-[13px] font-medium
+      transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap;
+  }
+  .btn-primary { @apply btn bg-primary border-primary text-white hover:bg-primary-hover; }
+  .btn-secondary { @apply btn bg-white border-line text-ink hover:bg-app; }
+  .btn-danger { @apply btn bg-danger border-danger text-white hover:opacity-90; }
+  .btn-ghost { @apply btn border-transparent text-ink-muted hover:bg-app hover:text-ink; }
+  .icon-btn {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded text-ink-muted hover:bg-app hover:text-ink
+      disabled:opacity-40;
+  }
+  .input {
+    @apply h-8 w-full rounded border border-line bg-white px-2.5 text-[13px] text-ink placeholder:text-gray-400
+      focus:border-secondary focus:outline-none focus:ring-1 focus:ring-secondary disabled:bg-app;
+  }
+  textarea.input { @apply h-auto py-2; }
+  .label { @apply mb-1 block text-xs font-medium text-ink-muted; }
+  .panel { @apply rounded-lg border border-line bg-white shadow-panel; }
+  .panel-title { @apply text-[13px] font-semibold text-ink; }
+  .th { @apply whitespace-nowrap px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-muted; }
+  .td { @apply px-3 py-2 text-[13px] text-ink align-middle; }
+}
