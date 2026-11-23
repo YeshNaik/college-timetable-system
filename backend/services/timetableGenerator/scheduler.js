@@ -38,9 +38,12 @@ class Scheduler {
     for (const session of sessions) {
       const assigned = await this.assignSession(session, assignments, assignmentDate);
       if (assigned) {
-        assignments.push(assigned);
-        if (assigned.warnings && Array.isArray(assigned.warnings)) {
-          warnings.push(...assigned.warnings);
+        const list = Array.isArray(assigned) ? assigned : [assigned];
+        assignments.push(...list);
+        for (const a of list) {
+          if (a.warnings && Array.isArray(a.warnings)) {
+            warnings.push(...a.warnings);
+          }
         }
       } else {
         const conflictItem = {
@@ -66,6 +69,28 @@ class Scheduler {
     };
   }
 
+  findConsecutiveSlots(startSlot, count) {
+    if (count <= 1) return [startSlot];
+    const daySlots = [...this.slotCache.values()]
+      .filter(s => s.day_of_week === startSlot.day_of_week)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+    
+    const startIndex = daySlots.findIndex(s => s.slot_id === startSlot.slot_id);
+    if (startIndex === -1 || startIndex + count > daySlots.length) return null;
+    
+    const chain = [startSlot];
+    for (let i = 1; i < count; i++) {
+      const prev = chain[i - 1];
+      const next = daySlots[startIndex + i];
+      if (next.start_time === prev.end_time) {
+        chain.push(next);
+      } else {
+        return null;
+      }
+    }
+    return chain;
+  }
+
   /**
    * Try to assign a single session using backtracking
    */
@@ -79,6 +104,12 @@ class Scheduler {
 
     // Try each time slot candidate
     for (const slot of availableSlots) {
+      let slotChain = [slot];
+      if (session.is_practical && session.consecutive_slots > 1) {
+        slotChain = this.findConsecutiveSlots(slot, session.consecutive_slots);
+        if (!slotChain) continue;
+      }
+
       // Find eligible teachers for this course and slot
       const teachers = await this.teacherAllocator.findEligibleTeachers(session, assignments, assignmentDate, slot.slot_id);
       if (teachers.length === 0) continue;
@@ -114,16 +145,52 @@ class Scheduler {
             continue;
           }
 
+          // If practical with multiple slots, ensure companions are conflict-free
+          let chainConflict = false;
+          if (slotChain.length > 1) {
+            for (let i = 1; i < slotChain.length; i++) {
+              const nextSlot = slotChain[i];
+              const tBusy = assignments.some(a => a.teacher_id === teacher.teacher_id && a.slot_id === nextSlot.slot_id);
+              const rBusy = assignments.some(a => a.classroom_id === classroom.classroom_id && a.slot_id === nextSlot.slot_id);
+              const sBusy = assignments.some(a => a.section_id === session.section_id && a.slot_id === nextSlot.slot_id);
+              if (tBusy || rBusy || sBusy) {
+                chainConflict = true;
+                break;
+              }
+            }
+          }
+          if (chainConflict) continue;
+
           // Check soft constraints
           const warnings = this.validator.checkSoftConstraints(assignment, assignments);
 
-          // Valid assignment found!
-          return {
+          // Valid assignment found! Return full chain of slots
+          const result = [{
             ...assignment,
             warnings,
             teacher_score: teacher.score,
             classroom_score: classroom.score
-          };
+          }];
+
+          for (let i = 1; i < slotChain.length; i++) {
+            const nextSlot = slotChain[i];
+            result.push({
+              ...session,
+              teacher_id: teacher.teacher_id,
+              teacher_name: teacher.teacher_name,
+              classroom_id: classroom.classroom_id,
+              room_number: classroom.room_number,
+              building: classroom.building,
+              slot_id: nextSlot.slot_id,
+              day_of_week: nextSlot.day_of_week,
+              start_time: nextSlot.start_time,
+              end_time: nextSlot.end_time,
+              assignment_date: assignmentDate,
+              is_consecutive_part: true
+            });
+          }
+
+          return result;
         }
       }
     }

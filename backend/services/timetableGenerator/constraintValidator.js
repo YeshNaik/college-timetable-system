@@ -80,18 +80,25 @@ class ConstraintValidator {
   }
 
   async checkConsecutiveSlots(assignment, existingAssignments) {
-    const [slot] = await pool.query('SELECT slot_id, day_of_week, start_time FROM Time_Slots WHERE slot_id = ?', [assignment.slot_id]);
+    const [slot] = await pool.query('SELECT slot_id, day_of_week, start_time, end_time FROM Time_Slots WHERE slot_id = ?', [assignment.slot_id]);
     if (slot.length === 0) return { reason: 'Slot not found' };
     const needed = assignment.consecutive_slots;
     let consecutive = 1;
-    const [allSlots] = await pool.query(`SELECT slot_id, start_time FROM Time_Slots WHERE day_of_week = ? AND start_time > ? ORDER BY start_time`, [slot[0].day_of_week, slot[0].start_time]);
+    let currentEnd = slot[0].end_time;
+    const [allSlots] = await pool.query(`SELECT slot_id, start_time, end_time FROM Time_Slots WHERE day_of_week = ? AND start_time >= ? ORDER BY start_time`, [slot[0].day_of_week, slot[0].start_time]);
     for (const nextSlot of allSlots) {
+      if (nextSlot.slot_id === slot[0].slot_id) continue;
+      if (nextSlot.start_time !== currentEnd) break;
       const teacherBusy = existingAssignments.some(a => a.teacher_id === assignment.teacher_id && a.slot_id === nextSlot.slot_id);
       const roomBusy = existingAssignments.some(a => a.classroom_id === assignment.classroom_id && a.slot_id === nextSlot.slot_id);
       const sectionBusy = existingAssignments.some(a => a.section_id === assignment.section_id && a.slot_id === nextSlot.slot_id);
-      if (!teacherBusy && !roomBusy && !sectionBusy) { consecutive++; if (consecutive >= needed) return null; } else break;
+      if (!teacherBusy && !roomBusy && !sectionBusy) {
+        consecutive++;
+        currentEnd = nextSlot.end_time;
+        if (consecutive >= needed) return null;
+      } else break;
     }
-    if (consecutive < needed) return { reason: `Only ${consecutive} consecutive slots, need ${needed}` };
+    if (consecutive < needed) return { reason: `Only ${consecutive} consecutive slots available, need ${needed}` };
     return null;
   }
 

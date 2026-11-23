@@ -131,7 +131,7 @@ class GeneratorService {
        JOIN Teachers te ON t.teacher_id = te.teacher_id
        JOIN Classrooms cr ON t.classroom_id = cr.classroom_id
        JOIN Time_Slots ts ON t.slot_id = ts.slot_id
-       JOIN Academic_Years ay ON c.department_id = ay.department_id
+       JOIN Academic_Years ay ON c.department_id = ay.department_id AND ay.year_number = CEIL(CAST(t.semester AS UNSIGNED) / 2)
        JOIN Sections s ON t.section = s.section_name AND s.academic_year_id = ay.academic_year_id
        WHERE c.department_id = ?`;
     const params = [departmentId];
@@ -216,10 +216,11 @@ class GeneratorService {
 
         // Also create actual Timetable entries
         await connection.query(
-          `INSERT INTO Timetable (course_id, teacher_id, classroom_id, slot_id, day_of_week, section, semester, academic_year)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO Timetable (course_id, teacher_id, classroom_id, slot_id, section, semester, academic_year)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE course_id = VALUES(course_id), teacher_id = VALUES(teacher_id), classroom_id = VALUES(classroom_id)`,
           [session.course_id, session.teacher_id, session.classroom_id, session.slot_id,
-           session.day_of_week || 'Monday', session.section_name, session.semester, academicSession]
+           session.section_name, session.semester, academicSession]
         );
       }
 

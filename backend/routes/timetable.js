@@ -78,8 +78,8 @@ router.post('/timetable', async (req, res) => {
     const day_of_week = req.body.day_of_week || slotRow[0]?.day_of_week || 'Monday';
 
     const [result] = await connection.query(
-      'INSERT INTO Timetable (course_id, teacher_id, classroom_id, slot_id, day_of_week, section, semester, academic_year) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [course_id, teacher_id, classroom_id, slot_id, day_of_week, section, semester || '1', academic_year || new Date().getFullYear().toString()]
+      'INSERT INTO Timetable (course_id, teacher_id, classroom_id, slot_id, section, semester, academic_year) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [course_id, teacher_id, classroom_id, slot_id, section, semester || '1', academic_year || new Date().getFullYear().toString()]
     );
     
     await connection.commit();
@@ -143,8 +143,8 @@ router.put('/timetable/:id', async (req, res) => {
     const day_of_week = req.body.day_of_week || slotRow[0]?.day_of_week || 'Monday';
 
     const [result] = await connection.query(
-      'UPDATE Timetable SET teacher_id = ?, course_id = ?, classroom_id = ?, slot_id = ?, day_of_week = ?, section = ?, semester = ?, academic_year = ? WHERE timetable_id = ?',
-      [teacher_id, course_id, classroom_id, slot_id, day_of_week, section || '', semester || '1', academic_year || new Date().getFullYear().toString(), id]
+      'UPDATE Timetable SET teacher_id = ?, course_id = ?, classroom_id = ?, slot_id = ?, section = ?, semester = ?, academic_year = ? WHERE timetable_id = ?',
+      [teacher_id, course_id, classroom_id, slot_id, section || '', semester || '1', academic_year || new Date().getFullYear().toString(), id]
     );
     
     await connection.commit();

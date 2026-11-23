@@ -24,7 +24,8 @@ BEGIN
         SELECT tt.timetable_id, tt.course_id, tt.slot_id, ts.day_of_week
         FROM Timetable tt
         JOIN Time_Slots ts ON tt.slot_id = ts.slot_id
-        WHERE tt.teacher_id = p_absent_teacher_id;
+        WHERE tt.teacher_id = p_absent_teacher_id
+        AND ts.day_of_week = DAYNAME(p_substitution_date);
     
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
     DECLARE CONTINUE HANDLER FOR SQLEXCEPTION

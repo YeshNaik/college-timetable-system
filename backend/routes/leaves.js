@@ -93,20 +93,31 @@ router.get('/leaves/:id/affected-entries', async (req, res) => {
       JOIN Classrooms cr ON t.classroom_id = cr.classroom_id
       JOIN Time_Slots ts ON t.slot_id = ts.slot_id
       WHERE t.teacher_id = ?
+      ORDER BY FIELD(ts.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'), ts.start_time
     `, [teacher_id]);
     
-    // Filter to only those entries where the day falls within leave period
-    const filtered = affected.filter(entry => {
-      const entryDay = entry.day_of_week;
-      // For simplicity, we return all entries - frontend can filter by date
-      return true;
-    });
+    // Determine active days of the week in leave range
+    const startDateObj = new Date(start_date);
+    const endDateObj = new Date(end_date);
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const activeDays = new Set();
+    const diffDays = Math.round((endDateObj - startDateObj) / (1000 * 60 * 60 * 24));
+    if (diffDays >= 6) {
+      dayNames.forEach(d => activeDays.add(d));
+    } else {
+      const cur = new Date(startDateObj);
+      while (cur <= endDateObj) {
+        activeDays.add(dayNames[cur.getDay()]);
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
     
-    res.json({ teacher_id, start_date, end_date, affected_entries: affected });
+    const filtered = affected.filter(entry => activeDays.has(entry.day_of_week));
+    res.json(filtered);
   } catch (err) { console.error('Error fetching affected entries:', err); res.status(500).json({ message: 'Database error' }); }
 });
 
-router.patch('/leaves/:id', async (req, res) => {
+const updateLeaveHandler = async (req, res) => {
   const { id } = req.params;
   const { teacher_id, start_date, end_date, reason, status } = req.body;
   if (status && !['Pending', 'Approved', 'Rejected'].includes(status)) {
@@ -120,7 +131,10 @@ router.patch('/leaves/:id', async (req, res) => {
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Leave not found' });
     res.json({ message: 'Leave updated' });
   } catch (err) { console.error('Error updating leave:', err); res.status(500).json({ message: 'Database error' }); }
-});
+};
+
+router.put('/leaves/:id', updateLeaveHandler);
+router.patch('/leaves/:id', updateLeaveHandler);
 
 router.delete('/leaves/:id', async (req, res) => {
   const { id } = req.params;

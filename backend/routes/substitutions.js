@@ -38,7 +38,15 @@ router.get('/substitutions/affected', async (req, res) => {
       JOIN Classrooms cr ON t.classroom_id = cr.classroom_id
       JOIN Time_Slots ts ON t.slot_id = ts.slot_id
       WHERE t.teacher_id = ?
-    `, [teacher_id]);
+        AND ts.day_of_week = DAYNAME(?)
+        AND NOT EXISTS (
+          SELECT 1 FROM Substitutions s
+          WHERE s.timetable_id = t.timetable_id
+            AND s.substitution_date = ?
+            AND s.status IN ('Assigned', 'Confirmed')
+        )
+      ORDER BY ts.start_time
+    `, [teacher_id, date, date]);
     res.json(rows);
   } catch (err) { console.error('Error fetching affected entries:', err); res.status(500).json({ message: 'Database error' }); }
 });
@@ -63,7 +71,8 @@ router.get('/substitutions/candidates', async (req, res) => {
              c.course_code AS qualified_course,
              CASE WHEN tt_conflict.timetable_id IS NULL THEN 1 ELSE 0 END AS is_available,
              COALESCE(existing.count, 0) AS existing_classes,
-             CASE WHEN leave_check.leave_id IS NULL THEN 1 ELSE 0 END AS is_not_on_leave
+             CASE WHEN leave_check.leave_id IS NULL THEN 1 ELSE 0 END AS is_not_on_leave,
+             CASE WHEN sub_conflict.substitution_id IS NULL THEN 1 ELSE 0 END AS is_not_substitute
       FROM Teacher_Courses tc
       JOIN Teachers t ON tc.teacher_id = t.teacher_id
       JOIN Departments d ON t.department_id = d.department_id
@@ -73,20 +82,34 @@ router.get('/substitutions/candidates', async (req, res) => {
       LEFT JOIN Teacher_Leaves leave_check ON t.teacher_id = leave_check.teacher_id
         AND leave_check.leave_status = 'Approved'
         AND ? BETWEEN leave_check.start_date AND leave_check.end_date
+      LEFT JOIN Substitutions sub_conflict ON t.teacher_id = sub_conflict.substitute_teacher_id
+        AND sub_conflict.substitution_date = ?
+        AND sub_conflict.status IN ('Assigned', 'Confirmed')
+        AND EXISTS (
+          SELECT 1 FROM Timetable sub_tt WHERE sub_tt.timetable_id = sub_conflict.timetable_id AND sub_tt.slot_id = ?
+        )
       WHERE tc.course_id = ? AND t.teacher_id != ? AND t.status = 'Active'
       ORDER BY t.teacher_name
-    `, [slot_id, academic_year, academic_year, academic_year, academic_year, date, course_id, absent_teacher_id]);
+    `, [slot_id, academic_year, academic_year, academic_year, academic_year, date, date, slot_id, course_id, absent_teacher_id]);
     
-    const result = candidates.map(c => ({
-      teacher_id: c.teacher_id,
-      teacher_name: c.teacher_name,
-      department_name: c.department_name,
-      qualified_course: c.qualified_course,
-      is_available: Boolean(c.is_available),
-      existing_classes: parseInt(c.existing_classes),
-      is_eligible: Boolean(c.is_available) && Boolean(c.is_not_on_leave),
-      reason: !c.is_available ? 'Has a class at this time' : (!c.is_not_on_leave ? 'On approved leave' : null)
-    }));
+    const result = candidates.map(c => {
+      const isEligible = Boolean(c.is_available) && Boolean(c.is_not_on_leave) && Boolean(c.is_not_substitute);
+      let reason = null;
+      if (!c.is_available) reason = 'Has a class at this time';
+      else if (!c.is_not_on_leave) reason = 'On approved leave';
+      else if (!c.is_not_substitute) reason = 'Already assigned as substitute at this time';
+
+      return {
+        teacher_id: c.teacher_id,
+        teacher_name: c.teacher_name,
+        department_name: c.department_name,
+        qualified_course: c.qualified_course,
+        is_available: Boolean(c.is_available) && Boolean(c.is_not_substitute),
+        existing_classes: parseInt(c.existing_classes),
+        is_eligible: isEligible,
+        reason
+      };
+    });
     res.json(result);
   } catch (err) { console.error('Error fetching candidates:', err); res.status(500).json({ message: 'Database error' }); }
 });
